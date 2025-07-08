@@ -29,10 +29,23 @@ const getFirebaseConfig = () => {
     try {
         // For Vite environment (like Netlify deployment)
         // @ts-ignore
-        if (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined' && import.meta.env.VITE_FIREBASE_CONFIG) {
+        if (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined') {
             // @ts-ignore
-            return JSON.parse(import.meta.env.VITE_FIREBASE_CONFIG);
+            const env = import.meta.env;
+            const config = {
+                apiKey: env.VITE_FIREBASE_API_KEY,
+                authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
+                projectId: env.VITE_FIREBASE_PROJECT_ID,
+                storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
+                messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+                appId: env.VITE_FIREBASE_APP_ID,
+            };
+            // Only return the config if all keys are present
+            if (Object.values(config).every(value => value)) {
+                return config;
+            }
         }
+        
         // Fallback for immersive environment
         // @ts-ignore
         if (typeof __firebase_config !== 'undefined') {

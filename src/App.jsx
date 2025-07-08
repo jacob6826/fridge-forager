@@ -39,6 +39,7 @@ const getFirebaseConfig = () => {
                 storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
                 messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
                 appId: env.VITE_FIREBASE_APP_ID,
+                measurementId: env.VITE_MEASUREMENT_ID
             };
             // Only return the config if all keys are present
             if (Object.values(config).every(value => value)) {

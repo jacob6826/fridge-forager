@@ -16,10 +16,7 @@ import {
     onSnapshot,
     writeBatch,
     setDoc,
-    getDocs,
-    query,
-    orderBy,
-    limit
+    updateDoc
 } from 'firebase/firestore';
 
 // --- Helper Functions & Configuration ---
@@ -27,7 +24,6 @@ const getAppId = () => typeof __app_id !== 'undefined' ? __app_id : 'fridge-fora
 
 const getFirebaseConfig = () => {
     try {
-        // For Vite environment (like Netlify deployment)
         // @ts-ignore
         if (typeof import.meta !== 'undefined' && typeof import.meta.env !== 'undefined') {
             // @ts-ignore
@@ -39,18 +35,11 @@ const getFirebaseConfig = () => {
                 storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
                 messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
                 appId: env.VITE_FIREBASE_APP_ID,
-                measurementId: env.VITE_MEASUREMENT_ID
             };
-            // Only return the config if all keys are present
-            if (Object.values(config).every(value => value)) {
-                return config;
-            }
+            if (Object.values(config).every(value => value)) return config;
         }
-        
-        // Fallback for immersive environment
         // @ts-ignore
-        if (typeof __firebase_config !== 'undefined') {
-            // @ts-ignore
+        if (typeof __firebase_config !== 'undefined') { // @ts-ignore
             return JSON.parse(__firebase_config);
         }
         return null;
@@ -60,44 +49,26 @@ const getFirebaseConfig = () => {
     }
 };
 
-
 // --- SVG Icons ---
-const PlusIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-);
-const TrashIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-);
-const XIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-);
-const StarIcon = ({ filled = false }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
-);
-const ChevronDownIcon = ({ isCollapsed }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`h-6 w-6 transition-transform duration-300 ${!isCollapsed ? 'rotate-180' : ''}`}>
-        <polyline points="6 9 12 15 18 9"></polyline>
-    </svg>
-);
-const Loader = ({ text = "Loading..." }) => (
-    <div className="flex flex-col items-center justify-center space-y-4 h-full">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-t-2 border-indigo-600"></div>
-        <p className="text-indigo-700 font-medium">{text}</p>
-    </div>
-);
+const PlusIcon = () => ( <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> );
+const TrashIcon = () => ( <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg> );
+const EditIcon = () => ( <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg> );
+const XIcon = () => ( <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> );
+const StarIcon = ({ filled = false }) => ( <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg> );
+const ChevronDownIcon = ({ isCollapsed }) => ( <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`h-6 w-6 transition-transform duration-300 ${!isCollapsed ? 'rotate-180' : ''}`}><polyline points="6 9 12 15 18 9"></polyline></svg> );
+const Loader = ({ text = "Loading..." }) => ( <div className="flex flex-col items-center justify-center space-y-4 h-full"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-t-2 border-indigo-600"></div><p className="text-indigo-700 font-medium">{text}</p></div> );
 
 // --- Unit Conversion Logic ---
 const conversionRates = {
     'ml': { base: 'ml', multiplier: 1 }, 'l': { base: 'ml', multiplier: 1000 }, 'tsp': { base: 'ml', multiplier: 4.92892 }, 'tbsp': { base: 'ml', multiplier: 14.7868 }, 'cup': { base: 'ml', multiplier: 236.588 },
     'g': { base: 'g', multiplier: 1 }, 'kg': { base: 'g', multiplier: 1000 }, 'oz': { base: 'g', multiplier: 28.3495 }, 'lb': { base: 'g', multiplier: 453.592 },
+    'stick': { base: 'g', multiplier: 113 }, 'sticks': { base: 'g', multiplier: 113 },
 };
 Object.keys(conversionRates).forEach(key => {
     const data = conversionRates[key];
-    if (!key.endsWith('s')) {
-        conversionRates[key + 's'] = data;
-        if (key === 'l') conversionRates['liter'] = data;
-        if (key === 'g') conversionRates['gram'] = data;
-    }
+    if (!key.endsWith('s')) conversionRates[key + 's'] = data;
+    if (key === 'l') conversionRates['liter'] = data;
+    if (key === 'g') conversionRates['gram'] = data;
 });
 
 const getNormalizedQuantity = (quantity, unit) => {
@@ -118,7 +89,6 @@ export default function App() {
 
     // App State
     const [ingredients, setIngredients] = useState([]);
-    const [newIngredient, setNewIngredient] = useState({ name: '', quantity: '', unit: '' });
     const [recipes, setRecipes] = useState([]);
     const [selectedRecipe, setSelectedRecipe] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -142,11 +112,7 @@ export default function App() {
                 const authInstance = getAuth(app);
                 setDb(firestore);
                 setAuth(authInstance);
-
-                onAuthStateChanged(authInstance, (user) => {
-                    setUser(user);
-                    setIsAuthReady(true);
-                });
+                onAuthStateChanged(authInstance, (user) => { setUser(user); setIsAuthReady(true); });
             } catch (e) {
                 console.error("Firebase initialization failed:", e);
                 setError("Could not connect to the database.");
@@ -161,12 +127,7 @@ export default function App() {
     // --- Firestore Data Sync ---
     useEffect(() => {
         if (user && db) {
-            const collectionsToSync = {
-                ingredients: setIngredients,
-                recentlyCooked: setRecentlyCooked,
-                favoritedRecipes: setFavoritedRecipes,
-            };
-
+            const collectionsToSync = { ingredients: setIngredients, recentlyCooked: setRecentlyCooked, favoritedRecipes: setFavoritedRecipes, };
             const unsubscribers = Object.entries(collectionsToSync).map(([collectionName, setter]) => {
                 const collRef = collection(db, `artifacts/${appId}/users/${user.uid}/${collectionName}`);
                 return onSnapshot(collRef, (snapshot) => {
@@ -177,13 +138,9 @@ export default function App() {
                     setError(`Could not load ${collectionName.replace(/([A-Z])/g, ' $1')}.`);
                 });
             });
-
             return () => unsubscribers.forEach(unsub => unsub());
         } else {
-            // Clear data on logout
-            setIngredients([]);
-            setRecentlyCooked([]);
-            setFavoritedRecipes([]);
+            setIngredients([]); setRecentlyCooked([]); setFavoritedRecipes([]);
         }
     }, [user, db, appId]);
 
@@ -193,26 +150,24 @@ export default function App() {
         try {
             if (action === 'register') await createUserWithEmailAndPassword(auth, email, password);
             else await signInWithEmailAndPassword(auth, email, password);
-        } catch (err) {
-            setError(err.message);
-        }
+        } catch (err) { setError(err.message); }
     };
-
-    const handleLogout = async () => {
-        if (auth) await signOut(auth);
-    };
+    const handleLogout = async () => { if (auth) await signOut(auth); };
 
     // --- Ingredient Management ---
-    const handleAddIngredient = async (e) => {
-        e.preventDefault();
-        if (!newIngredient.name.trim() || !newIngredient.quantity.trim() || !user) return;
-        const newIngredientData = { name: newIngredient.name.trim(), quantity: parseFloat(newIngredient.quantity) || 0, unit: newIngredient.unit.trim() };
+    const handleAddIngredient = async (ingredientData) => {
+        if (!user) return;
         try {
-            await addDoc(collection(db, `artifacts/${appId}/users/${user.uid}/ingredients`), newIngredientData);
-            setNewIngredient({ name: '', quantity: '', unit: '' });
+            await addDoc(collection(db, `artifacts/${appId}/users/${user.uid}/ingredients`), ingredientData);
         } catch (err) { console.error("Error adding ingredient:", err); }
     };
-
+    const handleUpdateIngredient = async (ingredientId, updatedData) => {
+        if (!user) return;
+        try {
+            const ingredientDoc = doc(db, `artifacts/${appId}/users/${user.uid}/ingredients`, ingredientId);
+            await updateDoc(ingredientDoc, updatedData);
+        } catch (err) { console.error("Error updating ingredient:", err); }
+    };
     const handleDeleteIngredient = async (ingredientId) => {
         if (!user) return;
         try {
@@ -223,10 +178,7 @@ export default function App() {
     // --- Recipe Generation ---
     const findRecipes = async () => {
         if (ingredients.length === 0) { setError("Please add some ingredients to your pantry first!"); return; }
-        setIsLoading(true);
-        setError(null);
-        setRecipes([]);
-        setSelectedRecipe(null);
+        setIsLoading(true); setError(null); setRecipes([]); setSelectedRecipe(null);
         const ingredientsString = ingredients.map(i => `${i.quantity} ${i.unit} ${i.name}`).join(', ');
         let prompt = `You are a helpful culinary assistant. Based ONLY on the following list of available ingredients, generate 3 diverse recipe options. For each recipe, provide a name, a short description, a list of the ingredients needed from the pantry, and step-by-step instructions. Ensure the needed ingredients do not exceed the available quantities. Available ingredients: ${ingredientsString}.`;
         if (mealType !== 'any') prompt += ` The user is looking for a ${mealType} recipe.`;
@@ -247,10 +199,34 @@ export default function App() {
     };
     
     // --- Cooking & Recipe History Logic ---
+    const checkIngredients = (recipe) => {
+        const ingredientsCopy = JSON.parse(JSON.stringify(ingredients));
+        const pantryMap = new Map(ingredientsCopy.map(i => [i.name.toLowerCase(), i]));
+        for (const needed of recipe.ingredientsNeeded) {
+            const neededNameLower = needed.name.toLowerCase();
+            let available = pantryMap.get(neededNameLower);
+            if (!available) {
+                for (const [pantryName, pantryIngredient] of pantryMap.entries()) {
+                    if (pantryName.includes(neededNameLower) || neededNameLower.includes(pantryName)) { available = pantryIngredient; break; }
+                }
+            }
+            if (!available) { setError(`You don't have any ${needed.name} (or a similar ingredient).`); return false; }
+            const availableNormalized = getNormalizedQuantity(available.quantity, available.unit);
+            const neededNormalized = getNormalizedQuantity(needed.quantity, needed.unit);
+            if (availableNormalized.baseUnit === neededNormalized.baseUnit) {
+                if (availableNormalized.baseQuantity < neededNormalized.baseQuantity) { setError(`Not enough ${needed.name}. You need ${needed.quantity} ${needed.unit} but only have ${available.quantity} ${available.unit}.`); return false; }
+            } else {
+                 if (available.quantity < needed.quantity) { setError(`Not enough ${needed.name}. You need ${needed.quantity} ${needed.unit} but only have ${available.quantity} ${available.unit}.`); return false; }
+            }
+        }
+        return true;
+    };
+
     const handleFinishCooking = async () => {
         const recipe = selectedRecipe;
         if (!recipe || !user) return;
-        let possible = true;
+        if (!checkIngredients(recipe)) { setIsCookingMode(false); return; }
+
         const batch = writeBatch(db);
         const ingredientsCopy = JSON.parse(JSON.stringify(ingredients));
         const updatedIngredientsMap = new Map(ingredientsCopy.map(i => [i.name.toLowerCase(), i]));
@@ -263,28 +239,16 @@ export default function App() {
                     if (pantryName.includes(neededNameLower) || neededNameLower.includes(pantryName)) { available = pantryIngredient; break; }
                 }
             }
-            if (!available) { setError(`You don't have any ${needed.name} (or a similar ingredient).`); possible = false; break; }
             const availableNormalized = getNormalizedQuantity(available.quantity, available.unit);
             const neededNormalized = getNormalizedQuantity(needed.quantity, needed.unit);
-            if (availableNormalized.baseUnit === neededNormalized.baseUnit) {
-                if (availableNormalized.baseQuantity < neededNormalized.baseQuantity) { setError(`Not enough ${needed.name}. You need ${needed.quantity} ${needed.unit} but only have ${available.quantity} ${available.unit}.`); possible = false; break; }
-                const neededInOriginalUnit = neededNormalized.baseQuantity / (conversionRates[available.unit.toLowerCase()]?.multiplier || 1);
-                available.quantity -= neededInOriginalUnit;
-            } else {
-                 if (available.quantity < needed.quantity) { setError(`Not enough ${needed.name}. You need ${needed.quantity} ${needed.unit} but only have ${available.quantity} ${available.unit}.`); possible = false; break; }
-                available.quantity -= needed.quantity;
-            }
+            const neededInOriginalUnit = neededNormalized.baseQuantity / (conversionRates[available.unit.toLowerCase()]?.multiplier || 1);
+            available.quantity -= neededInOriginalUnit;
         }
-
-        if (!possible) { setIsCookingMode(false); return; }
 
         for (const ingredient of updatedIngredientsMap.values()) {
             const docRef = doc(db, `artifacts/${appId}/users/${user.uid}/ingredients`, ingredient.id);
-            if (ingredient.quantity <= 0.001) {
-                batch.delete(docRef);
-            } else {
-                batch.update(docRef, { quantity: ingredient.quantity });
-            }
+            if (ingredient.quantity <= 0.001) batch.delete(docRef);
+            else batch.update(docRef, { quantity: ingredient.quantity });
         }
         
         const recipeId = recipe.id || `${Date.now()}-${recipe.recipeName.replace(/\s/g, '-')}`;
@@ -294,15 +258,10 @@ export default function App() {
 
         try {
             await batch.commit();
-            setSelectedRecipe(null);
-            setRecipes([]);
-            setIsCookingMode(false);
+            setSelectedRecipe(null); setRecipes([]); setIsCookingMode(false);
             setError({type: 'success', message: `Enjoy your ${recipe.recipeName}! Your pantry has been updated.`});
             setTimeout(() => setError(null), 5000);
-        } catch (err) {
-            console.error("Error finishing cooking:", err);
-            setError("Failed to update pantry.");
-        }
+        } catch (err) { console.error("Error finishing cooking:", err); setError("Failed to update pantry."); }
     };
 
     const handleFavoriteRecipe = async (recipe) => {
@@ -311,11 +270,8 @@ export default function App() {
         const favDocRef = doc(db, `artifacts/${appId}/users/${user.uid}/favoritedRecipes`, recipeId);
         const isFavorited = favoritedRecipes.some(r => r.id === recipeId);
         try {
-            if (isFavorited) {
-                await deleteDoc(favDocRef);
-            } else {
-                await setDoc(favDocRef, { ...recipe, id: recipeId });
-            }
+            if (isFavorited) await deleteDoc(favDocRef);
+            else await setDoc(favDocRef, { ...recipe, id: recipeId });
         } catch (err) { console.error("Error favoriting recipe:", err); }
     };
     
@@ -327,12 +283,12 @@ export default function App() {
     const renderMainContent = () => {
         if (isLoading) return <Loader text="Finding recipes..." />;
         if (recipes.length > 0) return <RecipeList recipes={recipes} onSelect={setSelectedRecipe} onBack={() => setRecipes([])} />;
-        if (selectedRecipe) return <RecipeDetail recipe={selectedRecipe} onStartCooking={() => setIsCookingMode(true)} onBack={() => setSelectedRecipe(null)} />;
+        if (selectedRecipe) return <RecipeDetail recipe={selectedRecipe} onStartCooking={() => { if(checkIngredients(selectedRecipe)) setIsCookingMode(true); }} onBack={() => setSelectedRecipe(null)} />;
         
         return (
             <div className="space-y-8">
-                <PantrySection ingredients={ingredients} onDelete={handleDeleteIngredient} newIngredient={newIngredient} onInputChange={(e) => setNewIngredient(prev => ({ ...prev, [e.target.name]: e.target.value }))} onAddIngredient={handleAddIngredient} isCollapsed={isPantryCollapsed} setIsCollapsed={setIsPantryCollapsed} />
-                <HistorySection favoritedRecipes={favoritedRecipes} recentlyCooked={recentlyCooked} onCookAgain={(r) => { setSelectedRecipe(r); setIsCookingMode(true); }} onFavorite={handleFavoriteRecipe} favoritedIds={favoritedRecipes.map(r => r.id)} />
+                <PantrySection ingredients={ingredients} onDelete={handleDeleteIngredient} onAdd={handleAddIngredient} onUpdate={handleUpdateIngredient} isCollapsed={isPantryCollapsed} setIsCollapsed={setIsPantryCollapsed} />
+                <HistorySection favoritedRecipes={favoritedRecipes} recentlyCooked={recentlyCooked} onCookAgain={(r) => { if(checkIngredients(r)) { setSelectedRecipe(r); setIsCookingMode(true); } }} onFavorite={handleFavoriteRecipe} favoritedIds={favoritedRecipes.map(r => r.id)} />
             </div>
         );
     };
@@ -401,27 +357,50 @@ const FindRecipeSection = ({ onFindRecipes, preferences, setPreferences, mealTyp
     );
 };
 
-const PantrySection = ({ ingredients, onDelete, newIngredient, onInputChange, onAddIngredient, isCollapsed, setIsCollapsed }) => (
-    <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-        <div className="flex justify-between items-center cursor-pointer" onClick={() => setIsCollapsed(!isCollapsed)}>
-            <h2 className="text-2xl font-semibold text-gray-800">Your Pantry</h2>
-            <button className="text-gray-600 hover:text-indigo-600" aria-label="Toggle Pantry"><ChevronDownIcon isCollapsed={isCollapsed} /></button>
-        </div>
-        {!isCollapsed && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-6 mt-4 border-t">
-                <IngredientForm newIngredient={newIngredient} onInputChange={onInputChange} onAddIngredient={onAddIngredient} />
-                <div>
-                    <h3 className="text-xl font-semibold text-gray-700 mb-4">Current Ingredients</h3>
-                    {ingredients.length === 0 ? <p className="text-gray-500 text-center py-8">Your pantry is empty.</p> : (
-                        <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-                            {ingredients.map(ing => (<div key={ing.id} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border"><span className="font-medium text-gray-700">{ing.name}</span><div className="flex items-center space-x-4"><span className="text-gray-600">{ing.quantity} {ing.unit}</span><button onClick={(e) => { e.stopPropagation(); onDelete(ing.id); }} className="text-red-500 hover:text-red-700" aria-label={`Delete ${ing.name}`}><TrashIcon /></button></div></div>))}
-                        </div>
-                    )}
-                </div>
+const PantrySection = ({ ingredients, onDelete, onAdd, onUpdate, isCollapsed, setIsCollapsed }) => {
+    const [editingId, setEditingId] = useState(null);
+    return (
+        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+            <div className="flex justify-between items-center cursor-pointer" onClick={() => setIsCollapsed(!isCollapsed)}>
+                <h2 className="text-2xl font-semibold text-gray-800">Your Pantry</h2>
+                <button className="text-gray-600 hover:text-indigo-600" aria-label="Toggle Pantry"><ChevronDownIcon isCollapsed={isCollapsed} /></button>
             </div>
-        )}
-    </div>
-);
+            {!isCollapsed && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-6 mt-4 border-t">
+                    <IngredientForm onSave={onAdd} title="Add Ingredient" />
+                    <div>
+                        <h3 className="text-xl font-semibold text-gray-700 mb-4">Current Ingredients</h3>
+                        {ingredients.length === 0 ? <p className="text-gray-500 text-center py-8">Your pantry is empty.</p> : (
+                            <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                                {ingredients.map(ing => (
+                                    <div key={ing.id}>
+                                        {editingId === ing.id ? (
+                                            <IngredientForm
+                                                initialData={ing}
+                                                onSave={(data) => { onUpdate(ing.id, data); setEditingId(null); }}
+                                                onCancel={() => setEditingId(null)}
+                                                isEditing={true}
+                                            />
+                                        ) : (
+                                            <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border">
+                                                <span className="font-medium text-gray-700">{ing.name}</span>
+                                                <div className="flex items-center space-x-3">
+                                                    <span className="text-gray-600">{ing.quantity} {ing.unit}</span>
+                                                    <button onClick={() => setEditingId(ing.id)} className="text-blue-500 hover:text-blue-700" aria-label={`Edit ${ing.name}`}><EditIcon /></button>
+                                                    <button onClick={() => onDelete(ing.id)} className="text-red-500 hover:text-red-700" aria-label={`Delete ${ing.name}`}><TrashIcon /></button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
 
 const HistorySection = ({ favoritedRecipes, recentlyCooked, onCookAgain, onFavorite, favoritedIds }) => (
      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -430,19 +409,52 @@ const HistorySection = ({ favoritedRecipes, recentlyCooked, onCookAgain, onFavor
      </div>
 );
 
-const IngredientForm = ({ newIngredient, onInputChange, onAddIngredient }) => (
-    <div>
-        <h3 className="text-xl font-semibold text-gray-700 mb-4">Add Ingredient</h3>
-        <form onSubmit={onAddIngredient} className="space-y-4">
-            <div><label htmlFor="name" className="block text-sm font-medium text-gray-700">Ingredient Name</label><input type="text" id="name" name="name" value={newIngredient.name} onChange={onInputChange} placeholder="e.g., Flour" className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" required /></div>
-            <div className="grid grid-cols-2 gap-4">
-                <div><label htmlFor="quantity" className="block text-sm font-medium text-gray-700">Quantity</label><input type="number" id="quantity" name="quantity" value={newIngredient.quantity} onChange={onInputChange} placeholder="e.g., 500" className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" required /></div>
-                <div><label htmlFor="unit" className="block text-sm font-medium text-gray-700">Unit</label><input type="text" id="unit" name="unit" value={newIngredient.unit} onChange={onInputChange} placeholder="e.g., grams" className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" /></div>
-            </div>
-            <button type="submit" className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"><PlusIcon /> Add Ingredient</button>
-        </form>
-    </div>
-);
+const IngredientForm = ({ onSave, title, initialData = { name: '', quantity: '', unit: '' }, isEditing = false, onCancel }) => {
+    const [ingredient, setIngredient] = useState(initialData);
+    const [unit, setUnit] = useState(initialData.unit && !['g', 'kg', 'oz', 'lb', 'ml', 'l', 'tsp', 'tbsp', 'cup', 'each', 'whole', 'stick'].includes(initialData.unit) ? 'other' : initialData.unit || 'g');
+    const commonUnits = ['g', 'kg', 'oz', 'lb', 'ml', 'l', 'tsp', 'tbsp', 'cup', 'each', 'whole', 'stick', 'other'];
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setIngredient(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleUnitChange = (e) => {
+        const { value } = e.target;
+        setUnit(value);
+        if (value !== 'other') {
+            setIngredient(prev => ({ ...prev, unit: value }));
+        }
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!ingredient.name.trim() || !ingredient.quantity) return;
+        onSave(ingredient);
+        if (!isEditing) {
+            setIngredient({ name: '', quantity: '', unit: '' });
+            setUnit('g');
+        }
+    };
+
+    return (
+        <div className={isEditing ? "bg-indigo-50 p-4 rounded-lg" : ""}>
+            <h3 className="text-xl font-semibold text-gray-700 mb-4">{title}</h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div><label htmlFor="name" className="block text-sm font-medium text-gray-700">Ingredient Name</label><input type="text" id="name" name="name" value={ingredient.name} onChange={handleChange} placeholder="e.g., Flour" className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 sm:text-sm" required /></div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div><label htmlFor="quantity" className="block text-sm font-medium text-gray-700">Quantity</label><input type="number" id="quantity" name="quantity" value={ingredient.quantity} onChange={handleChange} placeholder="e.g., 500" className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 sm:text-sm" required /></div>
+                    <div><label htmlFor="unit" className="block text-sm font-medium text-gray-700">Unit</label><select id="unit" name="unit-select" value={unit} onChange={handleUnitChange} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 sm:text-sm">{commonUnits.map(u => <option key={u} value={u}>{u}</option>)}</select></div>
+                </div>
+                {unit === 'other' && <div><label htmlFor="custom-unit" className="block text-sm font-medium text-gray-700">Custom Unit</label><input type="text" id="custom-unit" name="unit" value={ingredient.unit} onChange={handleChange} placeholder="e.g., bunch" className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 sm:text-sm" /></div>}
+                <div className="flex gap-2">
+                    <button type="submit" className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">{isEditing ? 'Save' : <><PlusIcon /> Add Ingredient</>}</button>
+                    {isEditing && <button type="button" onClick={onCancel} className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Cancel</button>}
+                </div>
+            </form>
+        </div>
+    );
+};
 
 const RecipeList = ({ recipes, onSelect, onBack }) => (
     <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">

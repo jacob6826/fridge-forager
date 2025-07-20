@@ -283,8 +283,8 @@ export default function App() {
 
     const renderMainContent = () => {
         if (isLoading) return <Loader text="Finding recipes..." />;
-        if (recipes.length > 0) return <RecipeList recipes={recipes} onSelect={setSelectedRecipe} onBack={() => setRecipes([])} />;
         if (selectedRecipe) return <RecipeDetail recipe={selectedRecipe} onStartCooking={() => { if(checkIngredients(selectedRecipe)) setIsCookingMode(true); }} onBack={() => setSelectedRecipe(null)} />;
+        if (recipes.length > 0) return <RecipeList recipes={recipes} onSelect={setSelectedRecipe} onBack={() => setRecipes([])} />;
         
         return (
             <div className="space-y-8">

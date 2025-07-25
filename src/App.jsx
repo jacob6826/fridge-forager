@@ -178,10 +178,10 @@ export default function App() {
     };
 
     // --- Shopping List Management ---
-    const handleAddToShoppingList = async (itemName) => {
-        if (!user || !itemName.trim()) return;
+    const handleAddToShoppingList = async (itemData) => {
+        if (!user || !itemData.name.trim()) return;
         try {
-            await addDoc(collection(db, `artifacts/${appId}/users/${user.uid}/shoppingList`), { name: itemName.trim() });
+            await addDoc(collection(db, `artifacts/${appId}/users/${user.uid}/shoppingList`), itemData);
         } catch (err) { console.error("Error adding to shopping list:", err); }
     };
     const handleDeleteFromShoppingList = async (itemId) => {
@@ -321,8 +321,8 @@ export default function App() {
         return (
             <div className="space-y-8">
                 <PantrySection ingredients={ingredients} onDelete={handleDeleteIngredient} onAdd={handleAddIngredient} onUpdate={handleUpdateIngredient} isCollapsed={isPantryCollapsed} setIsCollapsed={setIsPantryCollapsed} />
-                <HistorySection favoritedRecipes={favoritedRecipes} recentlyCooked={recentlyCooked} onCookAgain={(r) => { if(checkIngredients(r)) { setSelectedRecipe(r); setIsCookingMode(true); } }} onFavorite={handleFavoriteRecipe} favoritedIds={favoritedRecipes.map(r => r.id)} />
                 <ShoppingListSection shoppingList={shoppingList} onAdd={handleAddToShoppingList} onDelete={handleDeleteFromShoppingList} onMove={() => setIsMoveModalOpen(true)} />
+                <HistorySection favoritedRecipes={favoritedRecipes} recentlyCooked={recentlyCooked} onCookAgain={(r) => { if(checkIngredients(r)) { setSelectedRecipe(r); setIsCookingMode(true); } }} onFavorite={handleFavoriteRecipe} favoritedIds={favoritedRecipes.map(r => r.id)} />
             </div>
         );
     };
@@ -539,13 +539,13 @@ const FavoritedRecipesList = ({ recipes, onCookAgain, onFavorite }) => (
 // --- Shopping List Components ---
 
 const ShoppingListSection = ({ shoppingList, onAdd, onDelete, onMove }) => {
-    const [newItem, setNewItem] = useState('');
+    const [newItem, setNewItem] = useState({ name: '', quantity: '' });
     const [isCollapsed, setIsCollapsed] = useState(true);
 
     const handleSubmit = (e) => {
         e.preventDefault();
         onAdd(newItem);
-        setNewItem('');
+        setNewItem({ name: '', quantity: '' });
     };
 
     return (
@@ -556,15 +556,18 @@ const ShoppingListSection = ({ shoppingList, onAdd, onDelete, onMove }) => {
             </div>
             {!isCollapsed && (
                 <div className="pt-6 mt-4 border-t">
-                    <form onSubmit={handleSubmit} className="flex gap-2 mb-4">
-                        <input type="text" value={newItem} onChange={(e) => setNewItem(e.target.value)} placeholder="Add an item..." className="flex-grow px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 sm:text-sm" />
-                        <button type="submit" className="flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"><PlusIcon /></button>
+                    <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+                        <input type="text" value={newItem.name} onChange={(e) => setNewItem(prev => ({...prev, name: e.target.value}))} placeholder="Add an item..." className="sm:col-span-2 px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 sm:text-sm" />
+                        <div className="flex gap-2">
+                            <input type="text" value={newItem.quantity} onChange={(e) => setNewItem(prev => ({...prev, quantity: e.target.value}))} placeholder="Qty" className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 sm:text-sm" />
+                            <button type="submit" className="flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"><PlusIcon /></button>
+                        </div>
                     </form>
                     {shoppingList.length === 0 ? <p className="text-gray-500">Your shopping list is empty.</p> : (
                         <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
                             {shoppingList.map(item => (
                                 <div key={item.id} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border">
-                                    <span className="font-medium text-gray-700">{item.name}</span>
+                                    <span className="font-medium text-gray-700">{item.name} <span className="text-gray-500 text-sm">({item.quantity})</span></span>
                                     <button onClick={() => onDelete(item.id)} className="text-red-500 hover:text-red-700" aria-label={`Delete ${item.name}`}><TrashIcon /></button>
                                 </div>
                             ))}

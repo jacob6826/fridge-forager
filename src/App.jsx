@@ -159,8 +159,9 @@ export default function App() {
     // --- Ingredient Management ---
     const handleAddIngredient = async (ingredientData) => {
         if (!user) return;
+        const newIngredient = { ...ingredientData, createdAt: Date.now() };
         try {
-            await addDoc(collection(db, `artifacts/${appId}/users/${user.uid}/ingredients`), ingredientData);
+            await addDoc(collection(db, `artifacts/${appId}/users/${user.uid}/ingredients`), newIngredient);
         } catch (err) { console.error("Error adding ingredient:", err); }
     };
     const handleUpdateIngredient = async (ingredientId, updatedData) => {
@@ -194,7 +195,7 @@ export default function App() {
         if (!user || itemsToMove.length === 0) return;
         const batch = writeBatch(db);
         itemsToMove.forEach(item => {
-            const ingredientData = { name: item.name, quantity: parseFloat(item.quantity) || 0, unit: item.unit };
+            const ingredientData = { name: item.name, quantity: parseFloat(item.quantity) || 0, unit: item.unit, createdAt: Date.now() };
             const newIngredientRef = doc(collection(db, `artifacts/${appId}/users/${user.uid}/ingredients`));
             batch.set(newIngredientRef, ingredientData);
             const shoppingListItemRef = doc(db, `artifacts/${appId}/users/${user.uid}/shoppingList`, item.id);
@@ -394,6 +395,15 @@ const FindRecipeSection = ({ onFindRecipes, preferences, setPreferences, mealTyp
 
 const PantrySection = ({ ingredients, onDelete, onAdd, onUpdate, isCollapsed, setIsCollapsed }) => {
     const [editingId, setEditingId] = useState(null);
+    const [sortOrder, setSortOrder] = useState('alpha');
+
+    const sortedIngredients = [...ingredients].sort((a, b) => {
+        if (sortOrder === 'date') {
+            return (a.createdAt || 0) - (b.createdAt || 0);
+        }
+        return a.name.localeCompare(b.name);
+    });
+
     return (
         <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
             <div className="flex justify-between items-center cursor-pointer" onClick={() => setIsCollapsed(!isCollapsed)}>
@@ -404,10 +414,16 @@ const PantrySection = ({ ingredients, onDelete, onAdd, onUpdate, isCollapsed, se
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-6 mt-4 border-t">
                     <IngredientForm onSave={onAdd} title="Add Ingredient" />
                     <div>
-                        <h3 className="text-xl font-semibold text-gray-700 mb-4">Current Ingredients</h3>
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-xl font-semibold text-gray-700">Current Ingredients</h3>
+                            <div className="flex gap-2">
+                                <button onClick={() => setSortOrder('alpha')} className={`px-2 py-1 text-xs rounded-md ${sortOrder === 'alpha' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'}`}>A-Z</button>
+                                <button onClick={() => setSortOrder('date')} className={`px-2 py-1 text-xs rounded-md ${sortOrder === 'date' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'}`}>Date</button>
+                            </div>
+                        </div>
                         {ingredients.length === 0 ? <p className="text-gray-500 text-center py-8">Your pantry is empty.</p> : (
                             <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-                                {ingredients.map(ing => (
+                                {sortedIngredients.map(ing => (
                                     <div key={ing.id}>
                                         {editingId === ing.id ? (
                                             <IngredientForm
@@ -418,7 +434,10 @@ const PantrySection = ({ ingredients, onDelete, onAdd, onUpdate, isCollapsed, se
                                             />
                                         ) : (
                                             <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border">
-                                                <span className="font-medium text-gray-700">{ing.name}</span>
+                                                <div>
+                                                    <span className="font-medium text-gray-700">{ing.name}</span>
+                                                    {ing.createdAt && <p className="text-xs text-gray-500">Added: {new Date(ing.createdAt).toLocaleDateString()}</p>}
+                                                </div>
                                                 <div className="flex items-center space-x-3">
                                                     <span className="text-gray-600">{ing.quantity} {ing.unit}</span>
                                                     <button onClick={() => setEditingId(ing.id)} className="text-blue-500 hover:text-blue-700" aria-label={`Edit ${ing.name}`}><EditIcon /></button>
@@ -541,6 +560,7 @@ const FavoritedRecipesList = ({ recipes, onCookAgain, onFavorite }) => (
 const ShoppingListSection = ({ shoppingList, onAdd, onDelete, onMove }) => {
     const [newItem, setNewItem] = useState({ name: '', quantity: '' });
     const [isCollapsed, setIsCollapsed] = useState(true);
+    const sortedShoppingList = [...shoppingList].sort((a, b) => a.name.localeCompare(b.name));
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -565,7 +585,7 @@ const ShoppingListSection = ({ shoppingList, onAdd, onDelete, onMove }) => {
                     </form>
                     {shoppingList.length === 0 ? <p className="text-gray-500">Your shopping list is empty.</p> : (
                         <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
-                            {shoppingList.map(item => (
+                            {sortedShoppingList.map(item => (
                                 <div key={item.id} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border">
                                     <span className="font-medium text-gray-700">{item.name} <span className="text-gray-500 text-sm">({item.quantity})</span></span>
                                     <button onClick={() => onDelete(item.id)} className="text-red-500 hover:text-red-700" aria-label={`Delete ${item.name}`}><TrashIcon /></button>
@@ -584,7 +604,8 @@ const MoveToPantryModal = ({ items, onConfirm, onCancel }) => {
     const [listItems, setListItems] = useState([]);
 
     useEffect(() => {
-        setListItems(items.map(item => ({ ...item, checked: true, quantity: 1, unit: 'each' })));
+        const sortedItems = [...items].sort((a, b) => a.name.localeCompare(b.name));
+        setListItems(sortedItems.map(item => ({ ...item, checked: true, quantity: 1, unit: 'each' })));
     }, [items]);
 
     const handleItemChange = (id, field, value) => {

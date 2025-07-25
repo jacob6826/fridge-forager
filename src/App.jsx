@@ -436,7 +436,7 @@ const PantrySection = ({ ingredients, onDelete, onAdd, onUpdate, isCollapsed, se
                                             <div className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border">
                                                 <div>
                                                     <span className="font-medium text-gray-700">{ing.name}</span>
-                                                    {ing.createdAt && <p className="text-xs text-gray-500">Added: {new Date(ing.createdAt).toLocaleDateString()}</p>}
+                                                    {ing.createdAt && <p className="text-xs text-gray-500">Added: {new Date(ing.createdAt).toLocaleDateString('en-US', { year: '2-digit', month: '2-digit', day: '2-digit' })}</p>}
                                                 </div>
                                                 <div className="flex items-center space-x-3">
                                                     <span className="text-gray-600">{ing.quantity} {ing.unit}</span>

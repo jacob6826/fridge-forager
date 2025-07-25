@@ -98,7 +98,9 @@ export default function App() {
     const [isCookingMode, setIsCookingMode] = useState(false);
     const [recentlyCooked, setRecentlyCooked] = useState([]);
     const [favoritedRecipes, setFavoritedRecipes] = useState([]);
+    const [shoppingList, setShoppingList] = useState([]);
     const [isPantryCollapsed, setIsPantryCollapsed] = useState(true);
+    const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
 
     const appId = getAppId();
 
@@ -127,7 +129,7 @@ export default function App() {
     // --- Firestore Data Sync ---
     useEffect(() => {
         if (user && db) {
-            const collectionsToSync = { ingredients: setIngredients, recentlyCooked: setRecentlyCooked, favoritedRecipes: setFavoritedRecipes, };
+            const collectionsToSync = { ingredients: setIngredients, recentlyCooked: setRecentlyCooked, favoritedRecipes: setFavoritedRecipes, shoppingList: setShoppingList };
             const unsubscribers = Object.entries(collectionsToSync).map(([collectionName, setter]) => {
                 const collRef = collection(db, `artifacts/${appId}/users/${user.uid}/${collectionName}`);
                 return onSnapshot(collRef, (snapshot) => {
@@ -140,7 +142,7 @@ export default function App() {
             });
             return () => unsubscribers.forEach(unsub => unsub());
         } else {
-            setIngredients([]); setRecentlyCooked([]); setFavoritedRecipes([]);
+            setIngredients([]); setRecentlyCooked([]); setFavoritedRecipes([]); setShoppingList([]);
         }
     }, [user, db, appId]);
 
@@ -174,6 +176,36 @@ export default function App() {
             await deleteDoc(doc(db, `artifacts/${appId}/users/${user.uid}/ingredients`, ingredientId));
         } catch (err) { console.error("Error deleting ingredient:", err); }
     };
+
+    // --- Shopping List Management ---
+    const handleAddToShoppingList = async (itemName) => {
+        if (!user || !itemName.trim()) return;
+        try {
+            await addDoc(collection(db, `artifacts/${appId}/users/${user.uid}/shoppingList`), { name: itemName.trim() });
+        } catch (err) { console.error("Error adding to shopping list:", err); }
+    };
+    const handleDeleteFromShoppingList = async (itemId) => {
+        if (!user) return;
+        try {
+            await deleteDoc(doc(db, `artifacts/${appId}/users/${user.uid}/shoppingList`, itemId));
+        } catch (err) { console.error("Error deleting from shopping list:", err); }
+    };
+    const handleMoveToPantry = async (itemsToMove) => {
+        if (!user || itemsToMove.length === 0) return;
+        const batch = writeBatch(db);
+        itemsToMove.forEach(item => {
+            const ingredientData = { name: item.name, quantity: parseFloat(item.quantity) || 0, unit: item.unit };
+            const newIngredientRef = doc(collection(db, `artifacts/${appId}/users/${user.uid}/ingredients`));
+            batch.set(newIngredientRef, ingredientData);
+            const shoppingListItemRef = doc(db, `artifacts/${appId}/users/${user.uid}/shoppingList`, item.id);
+            batch.delete(shoppingListItemRef);
+        });
+        try {
+            await batch.commit();
+            setIsMoveModalOpen(false);
+        } catch (err) { console.error("Error moving items to pantry:", err); }
+    };
+
 
     // --- Recipe Generation ---
     const findRecipes = async () => {
@@ -290,15 +322,17 @@ export default function App() {
             <div className="space-y-8">
                 <PantrySection ingredients={ingredients} onDelete={handleDeleteIngredient} onAdd={handleAddIngredient} onUpdate={handleUpdateIngredient} isCollapsed={isPantryCollapsed} setIsCollapsed={setIsPantryCollapsed} />
                 <HistorySection favoritedRecipes={favoritedRecipes} recentlyCooked={recentlyCooked} onCookAgain={(r) => { if(checkIngredients(r)) { setSelectedRecipe(r); setIsCookingMode(true); } }} onFavorite={handleFavoriteRecipe} favoritedIds={favoritedRecipes.map(r => r.id)} />
+                <ShoppingListSection shoppingList={shoppingList} onAdd={handleAddToShoppingList} onDelete={handleDeleteFromShoppingList} onMove={() => setIsMoveModalOpen(true)} />
             </div>
         );
     };
 
     return (
         <div className="bg-gray-50 min-h-screen font-sans text-gray-800">
+            {isMoveModalOpen && <MoveToPantryModal items={shoppingList} onConfirm={handleMoveToPantry} onCancel={() => setIsMoveModalOpen(false)} />}
             <div className="container mx-auto p-4 md:p-8">
                 <header className="text-center mb-8 relative">
-                    <h1 className="text-4xl md:text-5xl font-bold text-gray-900">Fridge Forager</h1>
+                    <h1 className="text-4xl md:text-5xl font-bold text-gray-900 flex items-center justify-center">Fridge Forager</h1>
                     <p className="text-gray-600 mt-2">What can we make with what you have?</p>
                     <button onClick={handleLogout} className="absolute top-0 right-0 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">Logout</button>
                 </header>
@@ -501,3 +535,93 @@ const FavoritedRecipesList = ({ recipes, onCookAgain, onFavorite }) => (
         {recipes.length === 0 ? <p className="text-gray-500">You haven't saved any recipes yet.</p> : (<div className="space-y-3">{recipes.map(recipe => (<div key={recipe.id} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border"><span className="font-medium text-gray-700 truncate pr-2">{recipe.recipeName}</span><div className="flex items-center space-x-2"><button onClick={() => onCookAgain(recipe)} className="text-sm text-indigo-600 hover:text-indigo-800 font-semibold">Cook Again</button><button onClick={() => onFavorite(recipe)} className="text-yellow-400 hover:text-yellow-500" aria-label="Unfavorite this recipe"><StarIcon filled={true} /></button></div></div>))}</div>)}
     </div>
 );
+
+// --- Shopping List Components ---
+
+const ShoppingListSection = ({ shoppingList, onAdd, onDelete, onMove }) => {
+    const [newItem, setNewItem] = useState('');
+    const [isCollapsed, setIsCollapsed] = useState(true);
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        onAdd(newItem);
+        setNewItem('');
+    };
+
+    return (
+        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+            <div className="flex justify-between items-center cursor-pointer" onClick={() => setIsCollapsed(!isCollapsed)}>
+                <h2 className="text-2xl font-semibold text-gray-800">Shopping List</h2>
+                <button className="text-gray-600 hover:text-indigo-600" aria-label="Toggle Shopping List"><ChevronDownIcon isCollapsed={isCollapsed} /></button>
+            </div>
+            {!isCollapsed && (
+                <div className="pt-6 mt-4 border-t">
+                    <form onSubmit={handleSubmit} className="flex gap-2 mb-4">
+                        <input type="text" value={newItem} onChange={(e) => setNewItem(e.target.value)} placeholder="Add an item..." className="flex-grow px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 sm:text-sm" />
+                        <button type="submit" className="flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"><PlusIcon /></button>
+                    </form>
+                    {shoppingList.length === 0 ? <p className="text-gray-500">Your shopping list is empty.</p> : (
+                        <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+                            {shoppingList.map(item => (
+                                <div key={item.id} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg border">
+                                    <span className="font-medium text-gray-700">{item.name}</span>
+                                    <button onClick={() => onDelete(item.id)} className="text-red-500 hover:text-red-700" aria-label={`Delete ${item.name}`}><TrashIcon /></button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <button onClick={onMove} disabled={shoppingList.length === 0} className="w-full mt-4 flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed">Move to Pantry</button>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const MoveToPantryModal = ({ items, onConfirm, onCancel }) => {
+    const [listItems, setListItems] = useState([]);
+
+    useEffect(() => {
+        setListItems(items.map(item => ({ ...item, checked: true, quantity: 1, unit: 'each' })));
+    }, [items]);
+
+    const handleItemChange = (id, field, value) => {
+        setListItems(currentItems =>
+            currentItems.map(item => (item.id === id ? { ...item, [field]: value } : item))
+        );
+    };
+
+    const handleConfirm = () => {
+        const itemsToMove = listItems.filter(item => item.checked);
+        onConfirm(itemsToMove);
+    };
+    
+    const commonUnits = ['g', 'kg', 'oz', 'lb', 'ml', 'l', 'tsp', 'tbsp', 'cup', 'each', 'whole', 'stick'];
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+            <div className="bg-white rounded-xl shadow-lg p-6 w-full max-w-lg max-h-[90vh] flex flex-col">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-2xl font-semibold">Add to Pantry</h2>
+                    <button onClick={onCancel} className="text-gray-500 hover:text-gray-800"><XIcon /></button>
+                </div>
+                <p className="text-gray-600 mb-4">Uncheck any items you didn't buy and adjust quantities.</p>
+                <div className="flex-grow overflow-y-auto space-y-3 pr-2">
+                    {listItems.map(item => (
+                        <div key={item.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                            <input type="checkbox" checked={item.checked} onChange={(e) => handleItemChange(item.id, 'checked', e.target.checked)} className="h-5 w-5 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300" />
+                            <span className={`flex-grow font-medium ${!item.checked ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{item.name}</span>
+                            <input type="number" value={item.quantity} onChange={(e) => handleItemChange(item.id, 'quantity', e.target.value)} className="w-20 px-2 py-1 border border-gray-300 rounded-md" disabled={!item.checked} />
+                            <select value={item.unit} onChange={(e) => handleItemChange(item.id, 'unit', e.target.value)} className="px-2 py-1 border border-gray-300 rounded-md" disabled={!item.checked}>
+                                {commonUnits.map(u => <option key={u} value={u}>{u}</option>)}
+                            </select>
+                        </div>
+                    ))}
+                </div>
+                <div className="mt-6 flex justify-end gap-3">
+                    <button onClick={onCancel} className="py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Cancel</button>
+                    <button onClick={handleConfirm} className="py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700">Confirm & Add</button>
+                </div>
+            </div>
+        </div>
+    );
+};

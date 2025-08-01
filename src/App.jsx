@@ -5,7 +5,8 @@ import {
     onAuthStateChanged,
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
-    signOut
+    signOut,
+    signInAnonymously
 } from 'firebase/auth';
 import { 
     getFirestore, 
@@ -101,12 +102,15 @@ export default function App() {
     const [shoppingList, setShoppingList] = useState([]);
     const [isPantryCollapsed, setIsPantryCollapsed] = useState(true);
     const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
+    const [selectedTags, setSelectedTags] = useState([]);
 
     const appId = getAppId();
 
     // --- Firebase Initialization and Auth Listener ---
     useEffect(() => {
         const firebaseConfig = getFirebaseConfig();
+        const isPreview = typeof __app_id !== 'undefined';
+
         if (firebaseConfig && !db) {
             try {
                 const app = initializeApp(firebaseConfig);
@@ -114,7 +118,19 @@ export default function App() {
                 const authInstance = getAuth(app);
                 setDb(firestore);
                 setAuth(authInstance);
-                onAuthStateChanged(authInstance, (user) => { setUser(user); setIsAuthReady(true); });
+
+                if (isPreview) {
+                    // For preview, sign in anonymously to get a real user session
+                    signInAnonymously(authInstance).catch(err => {
+                        console.error("Preview anonymous sign-in failed:", err);
+                        setError("Could not create a preview session.");
+                    });
+                }
+
+                onAuthStateChanged(authInstance, (user) => {
+                    setUser(user);
+                    setIsAuthReady(true);
+                });
             } catch (e) {
                 console.error("Firebase initialization failed:", e);
                 setError("Could not connect to the database.");
@@ -215,7 +231,12 @@ export default function App() {
         const ingredientsString = ingredients.map(i => `${i.quantity} ${i.unit} ${i.name}`).join(', ');
         let prompt = `You are a helpful culinary assistant. Based ONLY on the following list of available ingredients, generate 3 diverse recipe options. For each recipe, provide a name, a short description, a list of the ingredients needed from the pantry, and step-by-step instructions. Ensure the needed ingredients do not exceed the available quantities. Available ingredients: ${ingredientsString}.`;
         if (mealType !== 'any') prompt += ` The user is looking for a ${mealType} recipe.`;
-        if (preferences.trim()) prompt += ` The user also has the following preferences, please try to accommodate them: ${preferences.trim()}.`;
+        
+        const allPreferences = [...selectedTags, preferences.trim()].filter(Boolean).join(', ');
+        if (allPreferences) {
+            prompt += ` The user also has the following preferences, please try to accommodate them: ${allPreferences}.`;
+        }
+
         const schema = { type: "ARRAY", items: { type: "OBJECT", properties: { recipeName: { type: "STRING" }, description: { type: "STRING" }, ingredientsNeeded: { type: "ARRAY", items: { type: "OBJECT", properties: { name: { type: "STRING" }, quantity: { type: "NUMBER" }, unit: { type: "STRING" } }, required: ["name", "quantity", "unit"] } }, instructions: { type: "ARRAY", items: { type: "STRING" } } }, required: ["recipeName", "description", "ingredientsNeeded", "instructions"] } };
         try {
             const payload = { contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", responseSchema: schema } };
@@ -339,7 +360,7 @@ export default function App() {
                 </header>
                 {error && ( <div className={`p-4 mb-6 rounded-lg text-center ${typeof error === 'object' && error.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`} role="alert">{typeof error === 'string' ? error : error.message}</div> )}
                 <div className="space-y-8">
-                    {!selectedRecipe && recipes.length === 0 && ( <FindRecipeSection onFindRecipes={findRecipes} preferences={preferences} setPreferences={setPreferences} mealType={mealType} setMealType={setMealType} hasIngredients={ingredients.length > 0} /> )}
+                    {!selectedRecipe && recipes.length === 0 && ( <FindRecipeSection onFindRecipes={findRecipes} preferences={preferences} setPreferences={setPreferences} mealType={mealType} setMealType={setMealType} hasIngredients={ingredients.length > 0} selectedTags={selectedTags} setSelectedTags={setSelectedTags} /> )}
                     {renderMainContent()}
                 </div>
             </div>
@@ -371,21 +392,43 @@ const AuthScreen = ({ onAuth, view, setView, error, setError }) => {
     );
 };
 
-const FindRecipeSection = ({ onFindRecipes, preferences, setPreferences, mealType, setMealType, hasIngredients }) => {
+const FindRecipeSection = ({ onFindRecipes, preferences, setPreferences, mealType, setMealType, hasIngredients, selectedTags, setSelectedTags }) => {
     const mealTypes = ['Any', 'Breakfast', 'Lunch', 'Dinner', 'Snack'];
+    const cuisineTags = ['American', 'Italian', 'Mexican', 'Asian', 'Indian', 'Mediterranean', 'French', 'Chinese', 'Japanese', 'Thai', 'Greek', 'Spanish'];
+    const styleTags = ['Healthy', 'Comfort Food', 'Quick & Easy', 'Low-Carb', 'Vegetarian', 'Vegan', 'Gluten-Free', 'Grilling', 'Baking', 'Slow Cooker'];
+
+    const handleTagClick = (tag) => {
+        setSelectedTags(prev => 
+            prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+        );
+    };
+
     return (
         <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-4">Find a Recipe</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <h2 className="text-2xl font-semibold text-gray-800 mb-2">Find a Recipe</h2>
+            <p className="text-sm text-gray-500 mb-4">Help guide the AI by selecting tags for cuisines or food styles you're in the mood for.</p>
+            <div className="space-y-4">
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">What meal are you making?</label>
+                    <h3 className="text-sm font-medium text-gray-700 mb-2">What meal are you making?</h3>
                     <div className="flex flex-wrap gap-2">
                         {mealTypes.map((type) => (<button key={type} onClick={() => setMealType(type.toLowerCase())} className={`px-3 py-1 text-sm font-medium rounded-full transition-colors ${ mealType === type.toLowerCase() ? 'bg-indigo-600 text-white shadow' : 'bg-white text-gray-700 hover:bg-indigo-100 border border-gray-300' }`}>{type}</button>))}
                     </div>
                 </div>
                 <div>
-                     <label htmlFor="preferences" className="block text-sm font-medium text-gray-700 mb-2">Other Cuisines, Diets, or Preferences</label>
-                     <input type="text" id="preferences" name="preferences" value={preferences} onChange={(e) => setPreferences(e.target.value)} placeholder="e.g., vegetarian, Italian, quick and easy" className="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+                    <h3 className="text-sm font-medium text-gray-700 mb-2">Cuisines</h3>
+                    <div className="flex flex-wrap gap-2">
+                        {cuisineTags.map((tag) => (<button key={tag} onClick={() => handleTagClick(tag)} className={`px-3 py-1 text-sm font-medium rounded-full transition-colors ${ selectedTags.includes(tag) ? 'bg-indigo-600 text-white shadow' : 'bg-white text-gray-700 hover:bg-indigo-100 border border-gray-300' }`}>{tag}</button>))}
+                    </div>
+                </div>
+                 <div>
+                    <h3 className="text-sm font-medium text-gray-700 mb-2">Food Styles</h3>
+                    <div className="flex flex-wrap gap-2">
+                        {styleTags.map((tag) => (<button key={tag} onClick={() => handleTagClick(tag)} className={`px-3 py-1 text-sm font-medium rounded-full transition-colors ${ selectedTags.includes(tag) ? 'bg-indigo-600 text-white shadow' : 'bg-white text-gray-700 hover:bg-indigo-100 border border-gray-300' }`}>{tag}</button>))}
+                    </div>
+                </div>
+                <div>
+                     <label htmlFor="preferences" className="block text-sm font-medium text-gray-700 mb-2">Other Preferences (optional)</label>
+                     <input type="text" id="preferences" name="preferences" value={preferences} onChange={(e) => setPreferences(e.target.value)} placeholder="e.g., spicy, no mushrooms" className="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 sm:text-sm" />
                 </div>
             </div>
             <div className="mt-6"><button onClick={onFindRecipes} disabled={!hasIngredients} className="w-full flex-shrink-0 flex justify-center items-center py-3 px-6 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400 disabled:cursor-not-allowed">Find Recipes!</button></div>
